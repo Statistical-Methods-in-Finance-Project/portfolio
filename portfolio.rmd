@@ -1,0 +1,91 @@
+---
+title: "Statistical Methods in Finance Final Project"
+date: "May 09, 2022"
+output: "pdf_document"
+---
+
+This document is for calculation purposes only and does not represent the final analysis.
+
+### Data Processing
+```{r}
+require(tidyquant)
+require(tidyverse)
+require(xts)
+
+library(MASS) # for fitdistr() and kde2d() functions
+library(copula) # for copula functions
+library(fGarch) # for standardized t density
+```
+
+```{r}
+DOWNLOAD.DATA = FALSE
+FILENAME = "./data/portfolio_historical_data.csv"
+```
+```{r}
+if(DOWNLOAD.DATA) {
+    # Asset symbols that will be used for this analysis
+    asset.symbols = c(
+        "AMD", "MSFT", "SBUX", "AAPL",
+        "ITUB", "FB", "NVDA", "F",
+        "BAC", "T", "XOM", "VALE"
+    )
+
+    # Download the assets' hisotrical data and load the
+    # variables to the environment
+    historical.data = getSymbols(
+        asset.symbols,
+        src = "yahoo",
+        from = "2017-05-05",
+        to = "2022-05-05",
+        periodicity = "monthly"
+    )
+
+    # This is a helper function that fetches an asset's
+    # data from the environment variabels by using its
+    # symbol
+    adjusted.price.by.symbol = function(symbol) {
+        Ad(get(symbol))
+    }
+
+    # Extract the adjusted price for each asset by
+    # using its symbol
+    adj.returns = asset.symbols %>%
+        map(adjusted.price.by.symbol) %>%
+        reduce(cbind)
+    names(adj.returns) = map_chr(asset.symbols, ~ paste0(.x, ".adj"))
+
+    # Calculate the net return for each asset
+    # and save the results to a tibble
+    net.returns = (diff(adj.returns) / stats::lag(adj.returns) * 100)
+    names(net.returns) = map_chr(asset.symbols, ~ paste0(.x, ".net"))
+    head(net.returns)
+    cbind(adj.returns, net.returns)[-1, ]
+    historical.data = cbind(adj.returns, net.returns)[-1, ] %>%
+        as_tibble(rownames = "Date")
+    
+    # Save the net returns into a csv file
+    write_csv(historical.data, FILENAME)
+
+} else {
+    historical.data = read_csv(FILENAME)
+}
+
+head(historical.data)
+```
+
+
+## Summary
+
+## Descriptive Statistics
+
+## Portfolio Theory
+
+## Asset Allocation
+
+## Principal Component analysis
+
+## Risk Management
+
+## Copulas
+
+## Conclusion
