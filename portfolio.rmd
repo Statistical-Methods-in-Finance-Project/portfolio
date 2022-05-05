@@ -7,7 +7,7 @@ output: "pdf_document"
 This document is for calculation purposes only and does not represent the final analysis.
 
 ### Data Processing
-```{r}
+```{r, warning=FALSE, message=FALSE}
 require(tidyquant)
 require(tidyverse)
 require(xts)
