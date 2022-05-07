@@ -8,18 +8,20 @@ This document is for calculation purposes only and does not represent the final 
 
 ### Data Processing
 ```{r, warning=FALSE, message=FALSE}
-require(tidyquant)
 require(tidyverse)
+require(tidyquant)
 require(xts)
 
-library(MASS) # for fitdistr() and kde2d() functions
-library(copula) # for copula functions
-library(fGarch) # for standardized t density
+require(MASS) # for fitdistr() and kde2d() functions
+require(copula) # for copula functions
+require(fGarch) # for standardized t density
+
+require(ggplot2)
 ```
 
 ```{r}
-DOWNLOAD.DATA = FALSE
 FILENAME = "./data/portfolio_historical_data.csv"
+DOWNLOAD.DATA = !file.exists(FILENAME)
 ```
 ```{r}
 if(DOWNLOAD.DATA) {
@@ -35,7 +37,7 @@ if(DOWNLOAD.DATA) {
     historical.data = getSymbols(
         asset.symbols,
         src = "yahoo",
-        from = "2017-05-05",
+        from = "2017-04-05",
         to = "2022-05-05",
         periodicity = "monthly"
     )
@@ -55,37 +57,138 @@ if(DOWNLOAD.DATA) {
     names(adj.returns) = map_chr(asset.symbols, ~ paste0(.x, ".adj"))
 
     # Calculate the net return for each asset
-    # and save the results to a tibble
     net.returns = (diff(adj.returns) / stats::lag(adj.returns) * 100)
     names(net.returns) = map_chr(asset.symbols, ~ paste0(.x, ".net"))
-    head(net.returns)
-    cbind(adj.returns, net.returns)[-1, ]
+
+    # Combine the ajusted prices and net returns for each
+    # asset and save it into a tibble
     historical.data = cbind(adj.returns, net.returns)[-1, ] %>%
         as_tibble(rownames = "Date")
-    
+
     # Save the net returns into a csv file
     write_csv(historical.data, FILENAME)
 
 } else {
     historical.data = read_csv(FILENAME)
+
 }
 
-head(historical.data)
+adj.returns = historical.data %>%
+                dplyr::select(Date, ends_with("adj"))
+
+net.returns = historical.data %>%
+                dplyr::select(Date, ends_with("net"))
+
+risk.free = 0.03
 ```
 
 
 ## Summary
 
 ## Descriptive Statistics
+```{r}
+returns.summary = summary(net.returns[, -1])
 
+# Means
+m = apply(net.returns[, -1], 2, mean)
+m
+
+# Standard Deviations
+cov.mat = cov(net.returns[, -1])
+std.dev = diag(cov.mat) %>% sqrt()
+std.dev
+
+# Skewness Coefficients
+skewness.coeff = skewness(net.returns[, -1])
+skewness.coeff
+
+# Kurtosis Coefficients
+kurtosis.coeff = kurtosis(net.returns[, -1]) + 3
+kurtosis.coeff
+
+```
+```{r}
+# price.over.time.plot = adj.returns %>% 
+#                         ggplot(aes(x = Date))
+for (asset in colnames(adj.returns)[-1]) {
+    price.over.time.plot = adj.returns %>% 
+                            ggplot(aes(x = Date)) +
+                                geom_line(aes(y = .data[[asset]])) + 
+                                labs(
+                                    title = "Adjusted Prices over Time",
+                                    x = "Year"
+                                )
+    price.over.time.plot
+    print(price.over.time.plot)
+}
+# price.over.time.plot = price.over.time.plot +
+#                         labs(
+#                             title = "Adjusted Prices over Time",
+#                             x = "Year",
+#                             y = "Adjusted Price"
+#                         )
+# price.over.time.plot
+
+
+```
 ## Portfolio Theory
+```{r}
+inv.cov.mat = solve(cov.mat)
+ones = matrix(1, dim(inv.cov.mat))
+
+# Compute the MVP
+w.mvp = (inv.cov.mat %*% ones) / as.numeric(t(ones) %*% inv.cov.mat %*% ones)
+w.mvp
+
+# Mean return
+m.mvp = t(w.mvp) %*% m %>% as.numeric()
+m.mvp
+
+# Standard deviation
+var.mvp = t(w.mvp) %*% cov.mat %*% w.mvp %>% as.numeric()
+sd.mvp = sqrt(var.mvp)
+sd.mvp
+
+# VaR
+S0 = 1e5
+alpha.mvp = 0.05
+
+# TODO: Change this to the quantile funciton of the
+# appropriate (we don't know if the mvp is normally
+# distributed)
+VaR.mvp = -S0 * (m.mvp + sd.mvp * qnorm(alpha.mvp))
+var.mvp
+
+# Expected Shortfall
+
+
+# Comment on the weights
+```
+
 
 ## Asset Allocation
+```{r}
+target.expected.return.yearly = 0.06
+target.expected.return.monthly = target.expected.return.yearly / 12
+
+```
 
 ## Principal Component analysis
+```{r}
+
+```
 
 ## Risk Management
+```{r}
+
+```
 
 ## Copulas
+```{r}
+
+```
 
 ## Conclusion
+```{r}
+
+```
