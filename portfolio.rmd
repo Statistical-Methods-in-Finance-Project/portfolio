@@ -539,6 +539,7 @@ target.expected.return.monthly = target.expected.return.yearly / 12
 
 ## Principal Component Analysis
 
+<<<<<<< HEAD
 <!-- Compute the sample correlation matrix of the returns on your assets. 
 Which assets are
 most highly correlated?
@@ -554,10 +555,18 @@ of each factors.
 Do they have any meaningful interpretation? -->
 
 
+=======
+>>>>>>> aadb4c07f9dd9a448a013bdfa9087da8817a152e
 ```{r}
 
 cor.mat <- cor(net.returns) %>%
     as.data.frame()
+<<<<<<< HEAD
+=======
+           
+cor.mat
+           
+>>>>>>> aadb4c07f9dd9a448a013bdfa9087da8817a152e
 
 cor.mat > 0.5 & cor.mat < 1
 
@@ -567,8 +576,11 @@ cor.mat > 0.5 & cor.mat < 1
 # MSFT NVDA  0.58334705
 # AAPL FB 0.56612120
 # AAPL NVDA 0.57386982
+
 # ITUB VALE 0.58532319
+
 # FB BAC 0.5058026
+
 # F BAC 0.57362077
 # F XOM 0.5771675
 # BAC XOM 0.7005870
@@ -591,20 +603,112 @@ cor.mat > 0 - 0.1 & cor.mat < 0 + 0.1
 
 # NVDA ITUB
 
-pca = prcomp(net.returns, scale = TRUE)
-autoplot(pca, data=net.returns, loadings=TRUE,
-         loadings.label=TRUE)
 
-
-for (i in 1 : 7){
-  
-  ans  = factanal(x = net.returns, factors = i)
-
-  print(ans)
-}
 
 
 ```
+Compute the sample correlation matrix of the returns on your assets. 
+Which assets are
+
+most highly correlated?
+
+The most highly correlated assets by correlation coefficient were:
+
+
+### BAC XOM 0.7005870
+### MSFT AAPL 0.62058674
+### ITUB VALE 0.58532319
+### MSFT NVDA  0.58334705
+### F XOM 0.5771675
+### AAPL NVDA 0.57386982
+### F BAC 0.57362077
+### AAPL FB 0.56612120
+### FB BAC 0.5058026
+
+Of these top 9 highest most correlated stocks, 4 were purely between technology stocks:
+MSFT AAPL
+MSFT NVDA
+NVDA AAPL
+AAPL FB
+
+4 were between non-tech sector stocks
+BAC XOM
+ITUB VALE
+F XOM
+F BAC
+
+1 was between a tech and a non tech sector stock.
+FB BAC
+
+
+Which are least correlated?
+
+The following 5 stock combinations had the lowest correlation numbers.
+
+### NVDA ITUB  -0.06996619
+
+### MSFT ITUB 0.02825463
+
+### AAPL ITUB  0.03429805
+
+### NVDA SBUX 0.06270411
+
+### F AMD 0.06624342
+
+From these results we can see that all of these stock combinations of low correlations are between a technology sector stock and a non-technology sector stock.
+
+The high (but no so high) level of correlation between both tech stocks among themselves and non tech sector stocks among themselves in addition to the low correlation numbers between tech and non tech stocks prove that the diversification and choice of assets in this portfolio serve the purpose of reducing the overall risk.
+
+```{r}
+pca = prcomp(net.returns, scale = TRUE)
+
+autoplot(pca, data=net.returns, loadings=TRUE,
+         loadings.label=TRUE,
+         x = 1,
+         y =2)
+
+autoplot(pca, data=net.returns, loadings=TRUE,
+         loadings.label=TRUE,
+         x = 2,
+         y =3)
+
+
+```
+
+Run the PCA analysis and comment on your results.
+
+From the plot of this principal component analysis, we can observe two distinct groups of which these eigenvectors(arrows) point in when plotting PC1 against PC2, and 3 distinct groups when plotting PC2 against PC3. Each time, however, the technology sector stocks of NVDA,AAPL,MSFT,FB,AMD are grouped together, while the other seven are grouped together in the 1st plot and split into (SBUX, T, BAC, F, and XOM) and (ITUB and VALE) in the second one.
+
+
+
+
+```{r}
+for (i in 1 : 7){
+  
+  ans  = factanal(x = net.returns, factors = i, scores = "regression")
+  
+
+  print(ans$loadings)
+  
+}
+
+ans  = factanal(x = net.returns, factors = 2, scores = "regression")
+
+
+
+autoplot(ans, net.returns,
+         labels = TRUE,
+         loadings = TRUE,
+         loadings.label = TRUE)
+```
+
+
+
+Do they have any meaningful interpretation?
+
+From our factor analysis we can observe from our graph of factor 1 vs factor 2 that there is a clear distinction between the two groups of technology vs non technology stocks. Moreover, the p-value of the hypothesis that 2 factors were sufficient is statistically significant in explaining our findings. In other words, our data having two factors makes sense visually and is backed up by the statistical tests run.
+
+
 
 ## Risk Management
 
@@ -687,10 +791,6 @@ data1 = cbind(pstd(amd, est.AMD[1], est.AMD[2], est.AMD[3]),
               pstd(vale, est.VALE[1], est.VALE[2], est.VALE[3]))
 
 
-
-n = nrow(data)
-
-
 fnorm = fitCopula(copula=normalCopula(dim=12),
                   data=data1,
                   method="ml")
@@ -734,7 +834,13 @@ copula_AIC <- tibble(Normal = AICcalc(fnorm),
 copula_AIC
 
 min(copula_AIC)
+
+print(paste("We choose The T Copula as it had the lowest AIC of",min(copula_AIC) ))
+
 ```
+
+### Implications?
+
 
 ## Conclusion
 ```{r}
