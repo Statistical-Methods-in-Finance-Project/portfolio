@@ -56,7 +56,7 @@ to.date = lubridate::date("2021-11-1")
 from.date = to.date - years(YEARS) - months(1)
 dates = seq(from.date, to.date - months(1), by = "months")
 
-risk.free = 0.03
+mf = 0.03
 ```
 
 ```{r}
@@ -143,12 +143,16 @@ std.dev = diag(cov.mat) %>% sqrt()
 std.dev
 
 # Skewness Coefficients
-skewness.coeff = skewness(net.returns)
+skewness.coeff = apply(net.returns, 2, skewness)
 skewness.coeff
 
 # Kurtosis Coefficients
-kurtosis.coeff = kurtosis(net.returns) + 3
+kurtosis.coeff = apply(net.returns, 2, kurtosis) + 3
 kurtosis.coeff
+
+cbind(m, std.dev, skewness.coeff, kurtosis.coeff) %>% round(3)
+
+#TODO: Compute betas
 ```
 ```{r, echo = F}
 # This is a helper function to create plots on a n x m grid given the passed dataset
@@ -288,6 +292,16 @@ create.equity.curve = function(data, x.lab = x, y.lab = "y") {
     )
 }
 ```
+
+```{r}
+s = 1
+m = net.returns[, 2] %>% as.numeric()
+for(i in seq.int(1, 59)) {
+    gr = 1 + m[i]                # gross return
+    s = s * gr
+}
+s
+```
 ### Monthly prices and returns plot
 ```{r, fig.align="center", fig.width = 12, fig.height=10}
 # Yearly Adjusted Price plot
@@ -380,7 +394,7 @@ follows a t distribution
 
 ### Sharpe's Slope
 ```{r}
-SharpeRatio(net.returns, RF = risk.free, FUN="StdDev")
+SharpeRatio(net.returns, RF = mf, FUN="StdDev")
 
 ```
 Microsoft has the highest sharpe slope, meaning that it has
@@ -406,8 +420,8 @@ ggsave(paste0(IMG_PATH, "net.return.scatter.png"), dpi = 700)
 
 ```{r}
 # Covariance matrix
-cov.mat %>% as_tibble()
-
+cov.mat %>% round(5)
+cov.mat
 # comment on the direction of linear association
 
 ```
@@ -433,32 +447,87 @@ var.mvp = t(w.mvp) %*% cov.mat %*% w.mvp %>% as.numeric()
 sd.mvp = sqrt(var.mvp)
 sd.mvp
 
-R.mvp = apply(
-    R, 2, function(x) {
-        t(w.mvp) %*% as.matrix(x, ncol = 1) %>% as.numeric()
-    }
-) %>% as.numeric()
-
-
-# VaR
-S0 = 1e5
-alpha.mvp = 0.05
-q.mvp = quantile(R.mvp, probs = c(alpha.mvp))
-VaR.mvp = -S0 * q.mvp
-VaR.mvp
-
-# Expected Shortfall
-ES.mvp = sum((-S0 * R) * (-S0 * R > VaR.mvp)) /  sum(-S0 * R > VaR.mvp)
-
-
 # Comment on the weights
 ```
+
+### Yearly MVP mean and sd
 ```{r}
 yearly.m.mvp = m.mvp * 12
 yearly.m.mvp
 
 yearly.sd.mvp = sd.mvp * sqrt(12)
 yearly.sd.mvp
+# Comment on these values relative to those of each asset
+```
+
+### MVP Returns
+```{r}
+R.mvp = apply(
+    R, 2, function(x) {
+        t(w.mvp) %*% as.matrix(x, ncol = 1) %>% as.numeric()
+    }
+) %>% 
+as.numeric() %>%
+as.matrix(ncol = 1)
+R.mvp
+```
+
+### VaR and ES (no short-sales)
+```{r}
+# VaR
+S0 = 1e5
+alpha = 0.05
+
+q.mvp = quantile(R.mvp, probs = c(alpha))
+VaR.mvp = (-S0 * q.mvp) %>% as.numeric()
+VaR.mvp
+
+# Expected Shortfall
+ES.mvp = sum((-S0 * R) * (-S0 * R > VaR.mvp)) /  sum(-S0 * R > VaR.mvp)
+ES.mvp
+
+individual.VaR = VaR(net.returns, p = 1 - alpha, method = "historical") * -S0
+individual.VaR
+```
+### VaR and ES (Short-sales allowed)
+```{r}
+VaR.mvp.shorting = -VaR.mvp
+VaR.mvp.shorting
+
+# Expected Shortfall
+ES.mvp.shorting = sum((S0 * R) * (S0 * R > VaR.mvp)) /  sum(S0 * R > VaR.mvp)
+ES.mvp.shorting
+
+# Compare the VaR and ES
+individual.VaR
+```
+
+```{r}
+efficient.portfolio = portfolio.optim(net.returns, rf = mf)
+ef.filter = efficient.portfolio$pm >= m.mvp
+
+
+efficient.portfolio.shorting = portfolio.optim(
+                                    net.returns,
+                                    rf = mf,
+                                    shorts = TRUE
+                                )
+m.eps = efficient.portfolio.shorting$px
+sd.eps = efficient.portfolio.shorting$ps
+sharpes.eps = (m.eps - mf) / sd.eps
+t.eps.filter = sharpes.eps == max(sharpes.eps)
+wt.eps = efficient.portfolio.shorting$pw[t.eps.filter]
+
+SharpeRatio(eps.returns, Rf = mf, FUN = "StdDev") %>%
+w.mvp
+efficient.portfolio.shorting$pw
+
+```
+
+```{r}
+# Tangency portfolio
+w.t = inv.cov.mat %*% (m - mf * ones) / ((t(ones) %*% inv.cov.mat %*% (m - mf * ones))[1])
+w.t
 ```
 
 ## Asset Allocation
@@ -470,7 +539,7 @@ target.expected.return.monthly = target.expected.return.yearly / 12
 
 ## Principal Component Analysis
 
-Compute the sample correlation matrix of the returns on your assets. 
+<!-- Compute the sample correlation matrix of the returns on your assets. 
 Which assets are
 most highly correlated?
 Which are least correlated?
@@ -482,16 +551,13 @@ Run the PCA analysis and comment on your results.
 
 Run factor analysis and report the number and the loadings
 of each factors. 
-Do they have any meaningful interpretation?
+Do they have any meaningful interpretation? -->
 
 
 ```{r}
 
 cor.mat <- cor(net.returns) %>%
     as.data.frame()
-           
-
-           
 
 cor.mat > 0.5 & cor.mat < 1
 
