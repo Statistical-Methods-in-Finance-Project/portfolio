@@ -20,6 +20,8 @@ require(MASS) # for fitdistr() and kde2d() functions
 require(copula) # for copula functions
 require(fGarch) # for standardized t density
 require(e1071)
+require(nortest)
+require(tseries)
 
 require(ggplot2)
 require(ggpubr)
@@ -123,6 +125,8 @@ head(net.returns)[, 1:5]
 ## Summary
 
 ## Descriptive Statistics
+
+### Sample Statistics
 ```{r}
 returns.summary = summary(net.returns)
 
@@ -142,7 +146,6 @@ skewness.coeff
 # Kurtosis Coefficients
 kurtosis.coeff = kurtosis(net.returns) + 3
 kurtosis.coeff
-
 ```
 ```{r, echo = F}
 # This is a helper function to create plots on a n x m grid given the passed dataset
@@ -173,7 +176,7 @@ create.line.plots = function(data, plot.type, x.lab = "x", y.lab = "y", nrow = 4
     return(plots[1])
 }
 
-create.box.plots = function(data, plot.type, x.lab = "x", y.lab = "y", nrow = 4, ncol = 3) {
+create.histogram = function(data, x.lab = "x", y.lab = "y", nrow = 4, ncol = 3) {
     n = dim(data)[1]; p = dim(data)[2]
 
     plots = list()
@@ -183,7 +186,35 @@ create.box.plots = function(data, plot.type, x.lab = "x", y.lab = "y", nrow = 4,
     for (asset in colnames(plot.data)[1:p]) {
         plots[[i]] = plot.data %>% 
                         ggplot(aes(x = .data[[asset]])) +
-                            plot.type() +
+                            geom_histogram() +
+                            labs(
+                                title = ASSET.NAMES[i],
+                                x = x.lab,
+                                y = y.lab
+                            )
+        i = i + 1
+    }
+    if(p > 1) {
+        return(
+            ggarrange(plotlist = plots, nrow = nrow, ncol = ncol) %>%
+                suppressMessages()
+        )
+    }
+    return(plots[1] %>% suppressMessages())
+}
+
+create.boxplot = function(data, x.lab = "x", y.lab = "y", nrow = 4, ncol = 3) {
+    n = dim(data)[1]; p = dim(data)[2]
+
+    plots = list()
+    plot.data = as_tibble(data)
+    plot.data$Date = dates[-1:-(length(dates) - n)]
+
+    i = 1
+    for (asset in colnames(plot.data)[1:p]) {
+        plots[[i]] = plot.data %>% 
+                        ggplot(aes(y = .data[[asset]])) +
+                            geom_boxplot()+
                             labs(
                                 title = ASSET.NAMES[i],
                                 x = x.lab,
@@ -231,7 +262,7 @@ create.qq.plots = function(data, y.lab = "y", nrow = 4, ncol = 3) {
     return(plots[1] %>% suppressMessages())
 }
 
-create.equity.curve = function(data, y.lab = "y") {
+create.equity.curve = function(data, x.lab = x, y.lab = "y") {
     n = dim(data)[1]; p = dim(data)[2]
     dollar.growth = rep(list(rep(1, n + 1)), p)
 
@@ -249,10 +280,12 @@ create.equity.curve = function(data, y.lab = "y") {
     dollar.growth = dollar.growth %>% as_tibble()
     create.line.plots(
         dollar.growth, geom_line,
+        x.lab = x.lab,
         y.lab = y.lab, nrow = 4, ncol = 3
     )
 }
 ```
+### Monthly prices and returns plot
 ```{r, fig.align="center", fig.width = 12, fig.height=10}
 # Yearly Adjusted Price plot
 create.line.plots(adj.price, geom_line, x.lab = "Year", y.lab = "Adj. Price")
@@ -262,22 +295,36 @@ create.line.plots(net.returns, geom_area, x.lab = "Year", y.lab = "Net Returns")
 # TODO: Check for anormalities
 ```
 ```{r, fig.align="center", fig.width = 12, fig.height=10}
+create.equity.curve(net.returns, x.lab = "Year", y.lab = "Growth of $1")
+create.equity.curve(sp500.returns, x.lab = "Year", y.lab = "Growth of $1")
+```
+```{r, fig.align="center", fig.width = 12, fig.height=10}
 # Yearly Net Returns plot
-create.box.plots(net.returns, geom_histogram, x.lab = "Net Returns")
+create.histogram(net.returns,  x.lab = "Net Returns")
+create.boxplot(net.returns, y.lab = "Net Returns")
 create.qq.plots(net.returns, y.lab = "Net Returns")
 # TODO: Check for anormalities
 ```
 
-```{r, fig.align="center", fig.width = 12, fig.height=10}
-create.equity.curve(net.returns)
-create.equity.curve(sp500.returns)
-```
 
+### Stationarity test
 ```{r}
-# Stationarity test
-# Normally distributed?
-# Outliers?
+apply(net.returns, 2, adf.test) %>% suppressWarnings()
 ```
+Starbucks and NVIDIA are non-stationary. The rest is stationary
+
+### Normally distributed
+```{r}
+apply(net.returns, 2, lillie.test)
+```
+The P-values are all greater than 0.05, hence we don't have
+any evidence suggesting that the returns are normally distributed
+### Outliers
+```{r}
+summary(net.returns)
+```
+The boxplots above suggest the presence of outliers in the dataset. This claim
+is further backed by the summary table above.
 
 ### Which distribution fits best
 ```{r}
@@ -294,7 +341,7 @@ measure_fitness = function(y, fun, ...) {
     aic = 2 * nll + 2 * p
     bic = 2 * nll - nll * p
 
-    return(c(aic, bic)) 
+    return(c(aic, bic))
 }
 
 distributions = c("Standardized t", "Skewed t", "GED", "Skewed GED")
@@ -328,6 +375,14 @@ best_fit(net.returns[, 12])
 Every asset except F, T, and XOM (which all three follow a GED distribution)
 follows a t distribution
 
+### Sharpe's Slope
+```{r}
+SharpeRatio(net.returns, RF = risk.free, FUN="StdDev")
+
+```
+Microsoft has the highest sharpe slope, meaning that it has
+the greatest reward-to-risk ratio over time.
+
 ```{r}
 # Convert monthly sample means and sd into annual sample means and sd
 yearly.sample.means = m * 12
@@ -335,7 +390,7 @@ yearly.sample.means
 
 yearly.sample.std.dev = std.dev * sqrt(12)
 yearly.sample.std.dev
-# Comment on these numbers 
+# Comment on these numbers
 ```
 
 ```{r,fig.align="center", fig.width = 12, fig.height=10, cache = T}
@@ -355,6 +410,9 @@ cov.mat %>% as_tibble()
 
 ## Portfolio Theory
 ```{r}
+# Convert the returns into a matrix for easier computations
+R = apply(net.returns, 1, function(x) as.numeric(x))
+
 inv.cov.mat = solve(cov.mat)
 ones = matrix(1, dim(inv.cov.mat))
 
@@ -371,22 +429,33 @@ var.mvp = t(w.mvp) %*% cov.mat %*% w.mvp %>% as.numeric()
 sd.mvp = sqrt(var.mvp)
 sd.mvp
 
+R.mvp = apply(
+    R, 2, function(x) {
+        t(w.mvp) %*% as.matrix(x, ncol = 1) %>% as.numeric()
+    }
+) %>% as.numeric()
+
+
 # VaR
 S0 = 1e5
 alpha.mvp = 0.05
-
-# TODO: Change this to the quantile funciton of the
-# appropriate (we don't know if the mvp is normally
-# distributed)
-VaR.mvp = -S0 * (m.mvp + sd.mvp * qnorm(alpha.mvp))
-var.mvp
+q.mvp = quantile(R.mvp, probs = c(alpha.mvp))
+VaR.mvp = -S0 * q.mvp
+VaR.mvp
 
 # Expected Shortfall
+ES.mvp = sum((-S0 * R) * (-S0 * R > VaR.mvp)) /  sum(-S0 * R > VaR.mvp)
 
 
 # Comment on the weights
 ```
+```{r}
+yearly.m.mvp = m.mvp * 12
+yearly.m.mvp
 
+yearly.sd.mvp = sd.mvp * sqrt(12)
+yearly.sd.mvp
+```
 
 ## Asset Allocation
 ```{r}
