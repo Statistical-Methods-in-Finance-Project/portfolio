@@ -27,6 +27,7 @@ require(ggplot2)
 require(ggpubr)
 require(GGally)
 require(png)
+require(ggfortify) # for PCA  and factor analysis
 
 theme_set(theme_bw())
 ```
@@ -57,6 +58,7 @@ dates = seq(from.date, to.date - months(1), by = "months")
 
 risk.free = 0.03
 ```
+
 ```{r}
 if(DOWNLOAD.DATA) {
     # Download the assets' hisotrical data and load the
@@ -116,6 +118,7 @@ adj.price$GSPC = NULL
 net.returns$GSPC = NULL
 
 ```
+
 ```{r, eval = F, echo = F}
 head(historical.data)[, 1:5]
 head(adj.price)[, 1:5]
@@ -400,6 +403,7 @@ ggsave(paste0(IMG_PATH, "net.return.scatter.png"), dpi = 700)
 
 # Comment relationships
 ```
+
 ```{r}
 # Covariance matrix
 cov.mat %>% as_tibble()
@@ -464,18 +468,207 @@ target.expected.return.monthly = target.expected.return.yearly / 12
 
 ```
 
-## Principal Component analysis
+## Principal Component Analysis
+
+Compute the sample correlation matrix of the returns on your assets. 
+Which assets are
+most highly correlated?
+Which are least correlated?
+
+Based on the estimated correlation
+values do you think diversification will reduce risk with these assets?
+
+Run the PCA analysis and comment on your results.
+
+Run factor analysis and report the number and the loadings
+of each factors. 
+Do they have any meaningful interpretation?
+
+
 ```{r}
+
+cor.mat <- cor(net.returns) %>%
+    as.data.frame()
+           
+
+           
+
+cor.mat > 0.5 & cor.mat < 1
+
+# HIGHEST CORR VALUES : > 0.5
+
+# MSFT AAPL 0.62058674
+# MSFT NVDA  0.58334705
+# AAPL FB 0.56612120
+# AAPL NVDA 0.57386982
+# ITUB VALE 0.58532319
+# FB BAC 0.5058026
+# F BAC 0.57362077
+# F XOM 0.5771675
+# BAC XOM 0.7005870
+
+
+# Negative & low correlation vals
+
+cor.mat > 0 - 0.1 & cor.mat < 0 + 0.1
+
+
+# LOW CORRELATION VALS
+
+
+# F AMD
+# MSFT ITUB
+
+#SBUX NVDA
+
+# AAPL ITUB
+
+# NVDA ITUB
+
+pca = prcomp(net.returns, scale = TRUE)
+autoplot(pca, data=net.returns, loadings=TRUE,
+         loadings.label=TRUE)
+
+
+for (i in 1 : 7){
+  
+  ans  = factanal(x = net.returns, factors = i)
+
+  print(ans)
+}
+
 
 ```
 
 ## Risk Management
+
+Assume that you have $100,000 to invest. For each asset, estimate the 5% value-at-risk of
+the and expected shortfall on $100,000 investment over a one month investment horizon
+based on the normal distribution using the estimated means and variances of your assets.
+Do the same using the nonparametric method we discussed in class. Which assets have the
+highest and lowest VaR at a one month horizon? Which assets have the highest and lowest
+expected shortfall at a one month horizon? Do the same for all your portfolios. Use the
+bootstrap to compute estimated standard errors and 95% confidence intervals for your 5%
+VaR and expected short fall. .
+
+
 ```{r}
 
 ```
 
 ## Copulas
+
+Use copulas to model the joint distribution of the returns. Which copula fits better the
+data? What are the implications?
+
 ```{r}
+
+msft <- net.returns %>% dplyr::select(MSFT) %>% pull()
+amd <- net.returns %>% dplyr::select(AMD) %>% pull()
+aapl <- net.returns %>% dplyr::select(AAPL) %>% pull()
+sbux <- net.returns %>% dplyr::select(SBUX) %>% pull()
+itub<- net.returns %>% dplyr::select(ITUB) %>% pull()
+fb <- net.returns %>% dplyr::select(FB) %>% pull()
+nvda <- net.returns %>% dplyr::select(NVDA) %>% pull()
+f <- net.returns %>% dplyr::select(F) %>% pull()
+bac <- net.returns %>% dplyr::select(BAC) %>% pull()
+t <- net.returns %>% dplyr::select(T) %>% pull()
+xom <- net.returns %>% dplyr::select(XOM) %>% pull()
+vale <- net.returns %>% dplyr::select(VALE) %>% pull()
+
+
+
+est.AMD = as.numeric( fitdistr(amd,"t")$estimate )
+est.SBUX = as.numeric( fitdistr(sbux,"t")$estimate )
+est.AAPL = as.numeric( fitdistr(aapl,"t")$estimate )
+est.MSFT= as.numeric( fitdistr(msft,"t")$estimate )
+est.ITUB = as.numeric( fitdistr(itub,"t")$estimate )
+est.FB = as.numeric( fitdistr(fb,"t")$estimate )
+est.NVDA = as.numeric( fitdistr(nvda,"t")$estimate )
+est.F =  as.numeric( fitdistr(f,"t")$estimate )
+est.BAC = as.numeric( fitdistr(bac,"t")$estimate )
+est.T = as.numeric( fitdistr(t, "t")$estimate )
+est.XOM = as.numeric( fitdistr(xom,"t")$estimate )
+est.VALE= as.numeric( fitdistr(vale,"t")$estimate )
+
+
+
+est.AMD[2] = est.AMD[2] * sqrt( est.AMD[3] / (est.AMD[3]-2) )
+est.SBUX[2] = est.SBUX[2] * sqrt(est.SBUX[3] / (est.SBUX[3]-2) )
+est.AAPL[2] = est.AAPL[2] * sqrt( est.AAPL[3] / (est.AAPL[3]-2) )
+est.MSFT[2] = est.MSFT[2] * sqrt(est.MSFT[3] / (est.MSFT[3]-2) )
+est.ITUB[2] = est.ITUB[2] * sqrt( est.ITUB[3] / (est.ITUB[3]-2) )
+est.FB[2] = est.FB[2] * sqrt(est.FB[3] / (est.FB[3]-2) )
+est.NVDA[2] = est.NVDA[2] * sqrt( est.NVDA[3] / (est.NVDA[3]-2) )
+est.F[2] = est.F[2] * sqrt(est.F[3] / (est.F[3]-2) )
+est.BAC[2] = est.BAC[2] * sqrt( est.BAC[3] / (est.BAC[3]-2) )
+est.T[2] = est.T[2] * sqrt(est.T[3] / (est.T[3]-2) )
+est.XOM[2] = est.XOM[2] * sqrt( est.XOM[3] / (est.XOM[3]-2) )
+est.VALE[2] = est.VALE[2] * sqrt(est.VALE[3] / (est.VALE[3]-2) )
+
+
+data1 = cbind(pstd(amd, est.AMD[1], est.AMD[2], est.AMD[3]),
+              pstd(sbux, est.SBUX[1], est.SBUX[2], est.SBUX[3]),
+              pstd(aapl, est.AAPL[1], est.AAPL[2], est.AAPL[3]),
+              pstd(msft, est.MSFT[1], est.MSFT[2], est.MSFT[3]),
+              pstd(itub, est.ITUB[1], est.ITUB[2], est.ITUB[3]),
+              pstd(fb, est.FB[1], est.FB[2], est.FB[3]),
+              pstd(nvda, est.NVDA[1], est.NVDA[2], est.NVDA[3]),
+              pstd(f, est.F[1], est.F[2], est.F[3]),
+              pstd(bac, est.BAC[1], est.BAC[2], est.BAC[3]),
+              pstd(t, est.T[1], est.T[2], est.T[3]),
+              pstd(xom, est.XOM[1], est.XOM[2], est.XOM[3]),
+              pstd(vale, est.VALE[1], est.VALE[2], est.VALE[3]))
+
+
+
+n = nrow(data)
+
+
+fnorm = fitCopula(copula=normalCopula(dim=4),
+                  data=data1,
+                  method="ml")
+
+ffrank = fitCopula(copula = frankCopula(3, dim = 4),
+                   data = data1,
+                   method = "ml")
+
+
+fgumbel = fitCopula(copula = gumbelCopula(3, dim=4),
+                    data = data1,
+                    method = "ml")
+
+fjoe = fitCopula(copula=joeCopula(2,dim=4),
+                 data=data1,
+                 method="ml")
+
+ft = fitCopula(copula = tCopula(dim = 4),
+                   data = data1,
+                   method = "ml")
+
+
+
+AICcalc <- function(fcopula){
+  
+
+loglik <- summary(fcopula)$loglik
+
+AIC <- -2*loglik + 2 * length(fcopula@estimate)
+
+return(AIC)
+  
+}
+
+copula_AIC <- tibble(Normal = AICcalc(fnorm),
+       Joe = AICcalc(fjoe),
+       Frank = AICcalc(ffrank),
+       Gumbel = AICcalc(fgumbel),
+       `T` = AICcalc(ft)) 
+
+copula_AIC
+
+min(copula_AIC)
+
 
 ```
 
