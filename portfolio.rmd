@@ -428,6 +428,28 @@ cov.mat
 ```
 
 ## Portfolio Theory
+
+Compute the minimum variance portfolio (MVP) and estimate its mean return, its standard
+deviation, its value at risk and expected shortfall. Comment on the weights of this portfolioand annualize the monthly mean and risk by multiplying the mean and the risk by 12.
+Comment on these values relative to those of each asset.
+
+Assume that you have $100,000
+to invest. For the MVP, determine the 5% value-at-risk of the $100,000 investment over a
+one month investment horizon. Compare this value to the VaR values for the individual
+assets. 
+Repeat this with the added restriction that short-sales are allowed, and calculate
+the expected return and risk of this portfolio.
+
+Using the estimated means, variances and
+covariances computed earlier, compute the efficient portfolio frontier, with and without
+short sales allowed, for the risky assets using the Markowitz approach
+
+Obtain the value of Sharpe ratio for each asset as well as for the tangency portfolio. Which asset has the
+highest Sharpe ratio? Compute the tangency portfolio when short-sales are not allowed and
+compute its expected return, variance and standard deviatio. Obtain the Sharpe ratios and
+comment on your results.
+
+
 ```{r}
 # Convert the returns into a matrix for easier computations
 R = apply(net.returns, 1, function(x) as.numeric(x))
@@ -504,10 +526,6 @@ individual.VaR
 ```
 ### Efficient Portfolio (SHORTS ALLOWED)
 ```{r}
-efficient.portfolio = portfolio.optim(net.returns, rf = mf)
-ef.filter = efficient.portfolio$pm >= m.mvp
-
-
 efficient.portfolio.shorting = portfolio.optim(
                                     net.returns,
                                     rf = mf,
@@ -519,7 +537,7 @@ sharpes.eps = (m.eps - mf) / sd.eps
 t.eps.filter = sharpes.eps == max(sharpes.eps)
 wt.eps = efficient.portfolio.shorting$px[t.eps.filter]
 
-SharpeRatio(eps.returns, Rf = mf, FUN = "StdDev")
+SharpeRatio(net.returns, Rf = mf, FUN = "StdDev")
 w.mvp
 efficient.portfolio.shorting$pw
 
@@ -527,24 +545,23 @@ efficient.portfolio.shorting$pw
 ### Efficient Portfolio (NO SHORTS)
 
 ```{r}
-efficient.portfolio = portfolio.optim(net.returns, rf = mf)
+
 ef.filter = efficient.portfolio$pm >= m.mvp
 
 
-efficient.portfolio.shorting = portfolio.optim(
-                                    net.returns,
-                                    rf = mf,
-                                    shorts = TRUE
-                                )
-m.eps = efficient.portfolio.shorting$px
-sd.eps = efficient.portfolio.shorting$ps
-sharpes.eps = (m.eps - mf) / sd.eps
-t.eps.filter = sharpes.eps == max(sharpes.eps)
-wt.eps = efficient.portfolio.shorting$px[t.eps.filter]
+efficient.portfolio = portfolio.optim(net.returns,
+                                      rf = mf,
+                                      shorts = FALSE)
 
-SharpeRatio(eps.returns, Rf = mf, FUN = "StdDev")
+m.ep = efficient.portfolio$px
+sd.ep = efficient.portfolio$ps
+sharpes.ep = (m.ep - mf) / sd.ep
+t.ep.filter = sharpes.ep == max(sharpes.ep)
+wt.ep = efficient.portfolio$px[t.ep.filter]
+
+SharpeRatio(net.returns, Rf = mf, FUN = "StdDev")
 w.mvp
-efficient.portfolio.shorting$pw
+efficient.portfolio$pw # for some reason even when shorts = FALSE we get negative weigths
 
 ```
 
@@ -576,9 +593,9 @@ function(er,cov.mat,risk.free = rf, shorts=TRUE)
   #
   # compute global minimum variance portfolio
   #
-  gmin.port <- globalMin.portfolio(er, cov.mat, shorts=shorts)
-  if(gmin.port$er < risk.free){
-    stop("Risk-free rate greater than avg return on global minimum variance portfolio")}
+  # gmin.port <- globalMin.portfolio(er, cov.mat, shorts=shorts)
+  # if(gmin.port$er < risk.free){
+  #   stop("Risk-free rate greater than avg return on global minimum variance portfolio")}
 
   # 
   # compute tangency portfolio
@@ -612,39 +629,20 @@ function(er,cov.mat,risk.free = rf, shorts=TRUE)
   return(tan.port)
 }
 
-tangency.portfolio(m,cov.mat,rf,shorts = FALSE)
+tangency_portfolio <- tangency.portfolio(m,cov.mat,mf,shorts = FALSE)
+weight_tan_portfolio <- tangency_portfolio$weights
+return_tp <- tangency_portfolio$er/12
+sd_tp <- tangency_portfolio$sd/12
+variance_tp <- sqrt(sd_tp)
+
+print(paste("The tangency portfolio has a weight distribution of",weight_tan_portfolio[1], "for AMD and",weight_tan_portfolio[7],"for NVDA."))
+
+print(paste("The tangency portfolio also has expected returns of",round(return_tp,5),",SD of:", round(sd_tp,5), "& Variance:", round(variance_tp, 5)))
+
+
+#tangency.portfolio(m,cov.mat,mf,shorts = TRUE)
 ```
 
-```{r}
-
-er <- m
-asset.names <- names(er)
-# if(risk.free < 0){
-#   stop("Risk-free rate must be positive")}
-er <- as.vector(er)
-cov.mat <- as.matrix(cov.mat)
-N <- nrow(cov.mat)
-  
-Dmat <- 2*cov.mat
-dvec <- rep.int(0, N)
-er.excess <- er - risk.free
-#Amat <- cbind(er.excess, diag(1,N))
-Amat <- cbind(rep(1,N), m)
-bvec <- c(1, .10)
-result <- quadprog::solve.QP(Dmat=Dmat,dvec=dvec,Amat=Amat,bvec=bvec,meq=1)
-w.t <- round(result$solution/sum(result$solution), 6)
-  
-w.t  
-# WITHOUT SHORT SALES
-
-    
-# w.t = tangency.portfolio(er = R,
-#                          cov.mat = cov.mat,
-#                          risk.free = rf,
-#                          shorts = FALSE)
-# w.t = inv.cov.mat %*% (m - mf * ones) / ((t(ones) %*% inv.cov.mat %*% (m - mf * ones))[1])
-# w.t1 = w.t
-```
 
 ## Asset Allocation
 
@@ -665,9 +663,18 @@ target.expected.return.monthly = target.expected.return.yearly / 12
 eff.port.return.risky = portfolio.optim(x = net.returns,
                                         pm = target.expected.return.monthly)
 
+
+m.ep.risky = eff.port.return.risky$px
+sd.ep.risky = eff.port.return.risky$ps
+sharpes.ep.risky = (m.ep.risky - mf) / sd.ep.risky
+t.ep.filter.risky = sharpes.ep.risky == max(sharpes.ep.risky)
+wt.ep.risky = eff.port.return.risky$px[t.ep.filter.risky]
+
+
+
 R.eff.port.risky = eff.port.return.risky$px
 
-print(paste("The monthly risl on this efficient portfolio is ", round(eff.port.return.risky$ps, 4)))
+print(paste("The monthly risk on this efficient portfolio is ", round(eff.port.return.risky$ps, 4)))
 
 
 
@@ -707,14 +714,26 @@ In this allocation,
 how much is invested in each of the assets and how much is invested in the risk free asset?
 
 ```{r}
-# W*mean_T + 1-w(rf) = 0.05
+eff.port.return.risky$pm*eff.port.return.risky$pw
+eff.port.return.risky$pw %*% m
+
+weight_tan_portfolio <- tangency.portfolio(m,cov.mat,mf,shorts = FALSE)$weights
+
+wt.monthly = wt.ep.risky/12
+
+# exp_return_tang_port* w + (1-w)*mf = target.expected.return.monthly
+# w(exp_return_tang_port - mf) + mf = target.expected.return.monthly
+w_tan = (target.expected.return.monthly - mf)/(wt.monthly - mf)
+
+w_rf= 1-w_tan
+
+print(paste("Despite the tangency portfolios not allowing for short sales, the optimum portfolio when combining the tangency portfolio with that of the risk free asset involves  a short sale of the risk free asset; essentially borrowing money. The weights of the tangency portfolio and risk free asset are", round(w_tan,3),"and", round(w_rf,3),"respectfully."))
+
+print(paste("The tangency portfolio weights from earlier means the final asset allocation is: AMD:",round(weight_tan_portfolio[1]*w_tan,3),"NVDA:", round(weight_tan_portfolio[7]*w_tan,3),"Risk Free Asset:",round(w_rf,3)))
+
+
+
 ```
-
-Compute the monthly risk on this efficient portfolio, as well as the monthly and 5% value-
-at-risk and expected shortfall based on an initial $100,000 investment.
-
-Compare this with the VaR computed from the allocation of risky assets without short sales.
-
 
 
 ## Principal Component Analysis
