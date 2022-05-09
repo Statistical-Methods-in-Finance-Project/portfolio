@@ -563,18 +563,18 @@ data? What are the implications?
 
 ```{r}
 
-msft <- net.returns %>% dplyr::select(MSFT) %>% pull()
-amd <- net.returns %>% dplyr::select(AMD) %>% pull()
-aapl <- net.returns %>% dplyr::select(AAPL) %>% pull()
-sbux <- net.returns %>% dplyr::select(SBUX) %>% pull()
-itub<- net.returns %>% dplyr::select(ITUB) %>% pull()
-fb <- net.returns %>% dplyr::select(FB) %>% pull()
-nvda <- net.returns %>% dplyr::select(NVDA) %>% pull()
-f <- net.returns %>% dplyr::select(F) %>% pull()
-bac <- net.returns %>% dplyr::select(BAC) %>% pull()
-t <- net.returns %>% dplyr::select(T) %>% pull()
-xom <- net.returns %>% dplyr::select(XOM) %>% pull()
-vale <- net.returns %>% dplyr::select(VALE) %>% pull()
+msft <- net.returns[,1] %>% as.numeric()
+amd <-  net.returns[,2] %>% as.numeric()
+aapl <- net.returns[,3] %>% as.numeric()
+sbux <- net.returns[,4] %>% as.numeric()
+itub<-  net.returns[,5] %>% as.numeric()
+fb <-   net.returns[,6] %>% as.numeric()
+nvda <- net.returns[,7] %>% as.numeric()
+f <-    net.returns[,8] %>% as.numeric()
+bac <-  net.returns[,9] %>% as.numeric()
+t <-    net.returns[,10] %>% as.numeric()
+xom <-  net.returns[,11] %>% as.numeric()
+vale <- net.returns[,12] %>% as.numeric()
 
 
 
@@ -625,24 +625,24 @@ data1 = cbind(pstd(amd, est.AMD[1], est.AMD[2], est.AMD[3]),
 n = nrow(data)
 
 
-fnorm = fitCopula(copula=normalCopula(dim=4),
+fnorm = fitCopula(copula=normalCopula(dim=12),
                   data=data1,
                   method="ml")
 
-ffrank = fitCopula(copula = frankCopula(3, dim = 4),
+ffrank = fitCopula(copula = frankCopula(3, dim = 12),
                    data = data1,
                    method = "ml")
 
 
-fgumbel = fitCopula(copula = gumbelCopula(3, dim=4),
+fgumbel = fitCopula(copula = gumbelCopula(3, dim=12),
                     data = data1,
                     method = "ml")
 
-fjoe = fitCopula(copula=joeCopula(2,dim=4),
+fjoe = fitCopula(copula=joeCopula(2,dim=12),
                  data=data1,
                  method="ml")
 
-ft = fitCopula(copula = tCopula(dim = 4),
+ft = fitCopula(copula = tCopula(dim = 12),
                    data = data1,
                    method = "ml")
 
@@ -668,8 +668,6 @@ copula_AIC <- tibble(Normal = AICcalc(fnorm),
 copula_AIC
 
 min(copula_AIC)
-
-
 ```
 
 ## Conclusion
