@@ -28,6 +28,7 @@ require(ggpubr)
 require(GGally)
 require(png)
 require(ggfortify) # for PCA  and factor analysis
+require(introCompFinR)
 
 theme_set(theme_bw())
 ```
@@ -295,9 +296,9 @@ create.equity.curve = function(data, x.lab = x, y.lab = "y") {
 
 ```{r}
 s = 1
-m = net.returns[, 2] %>% as.numeric()
+m_gross = net.returns[, 2] %>% as.numeric()
 for(i in seq.int(1, 59)) {
-    gr = 1 + m[i]                # gross return
+    gr = 1 + m_gross[i]                # gross return
     s = s * gr
 }
 s
@@ -501,6 +502,29 @@ ES.mvp.shorting
 # Compare the VaR and ES
 individual.VaR
 ```
+### Efficient Portfolio (SHORTS ALLOWED)
+```{r}
+efficient.portfolio = portfolio.optim(net.returns, rf = mf)
+ef.filter = efficient.portfolio$pm >= m.mvp
+
+
+efficient.portfolio.shorting = portfolio.optim(
+                                    net.returns,
+                                    rf = mf,
+                                    shorts = TRUE
+                                )
+m.eps = efficient.portfolio.shorting$px
+sd.eps = efficient.portfolio.shorting$ps
+sharpes.eps = (m.eps - mf) / sd.eps
+t.eps.filter = sharpes.eps == max(sharpes.eps)
+wt.eps = efficient.portfolio.shorting$px[t.eps.filter]
+
+SharpeRatio(eps.returns, Rf = mf, FUN = "StdDev")
+w.mvp
+efficient.portfolio.shorting$pw
+
+```
+### Efficient Portfolio (NO SHORTS)
 
 ```{r}
 efficient.portfolio = portfolio.optim(net.returns, rf = mf)
@@ -516,57 +540,201 @@ m.eps = efficient.portfolio.shorting$px
 sd.eps = efficient.portfolio.shorting$ps
 sharpes.eps = (m.eps - mf) / sd.eps
 t.eps.filter = sharpes.eps == max(sharpes.eps)
-wt.eps = efficient.portfolio.shorting$pw[t.eps.filter]
+wt.eps = efficient.portfolio.shorting$px[t.eps.filter]
 
-SharpeRatio(eps.returns, Rf = mf, FUN = "StdDev") %>%
+SharpeRatio(eps.returns, Rf = mf, FUN = "StdDev")
 w.mvp
 efficient.portfolio.shorting$pw
 
 ```
 
+
+### Tangency Portfolio
+
 ```{r}
+
+tangency.portfolio <-
+function(er,cov.mat,risk.free = rf, shorts=TRUE)
+{
+  call <- match.call()
+
+  #
+  # check for valid inputs
+  #
+  asset.names <- names(er)
+  # if(risk.free < 0){
+  #   stop("Risk-free rate must be positive")}
+  er <- as.vector(er)
+  cov.mat <- as.matrix(cov.mat)
+  N <- length(er)
+  if(N != nrow(cov.mat)){
+    stop("invalid inputs")}
+  if(any(diag(chol(cov.mat)) <= 0)){
+    stop("Covariance matrix not positive definite")}
+  # remark: could use generalized inverse if cov.mat is positive semi-definite
+
+  #
+  # compute global minimum variance portfolio
+  #
+  gmin.port <- globalMin.portfolio(er, cov.mat, shorts=shorts)
+  if(gmin.port$er < risk.free){
+    stop("Risk-free rate greater than avg return on global minimum variance portfolio")}
+
+  # 
+  # compute tangency portfolio
+  #
 # Tangency portfolio
-w.t = inv.cov.mat %*% (m - mf * ones) / ((t(ones) %*% inv.cov.mat %*% (m - mf * ones))[1])
-w.t
+
+  if(shorts==TRUE){
+    cov.mat.inv <- solve(cov.mat)
+    w.t <- cov.mat.inv %*% (er - risk.free) # tangency portfolio
+    w.t <- as.vector(w.t/sum(w.t))          # normalize weights
+  } else if(shorts==FALSE){
+    Dmat <- 2*cov.mat
+    dvec <- rep.int(0, N)
+    er.excess <- er - risk.free
+    Amat <- cbind(er.excess, diag(1,N))
+    bvec <- c(1, rep(0,N))
+    result <- quadprog::solve.QP(Dmat=Dmat,dvec=dvec,Amat=Amat,bvec=bvec,meq=1)
+    w.t <- round(result$solution/sum(result$solution), 6)
+  } else {
+    stop("Shorts needs to be logical. For no-shorts, shorts=FALSE.")
+  }
+    
+  names(w.t) <- asset.names
+  er.t <- crossprod(w.t,er)
+  sd.t <- sqrt(t(w.t) %*% cov.mat %*% w.t)
+  tan.port <- list("call" = call,
+		   "er" = as.vector(er.t),
+		   "sd" = as.vector(sd.t),
+		   "weights" = w.t)
+  class(tan.port) <- "portfolio"
+  return(tan.port)
+}
+
+tangency.portfolio(m,cov.mat,rf,shorts = FALSE)
+```
+
+```{r}
+
+er <- m
+asset.names <- names(er)
+# if(risk.free < 0){
+#   stop("Risk-free rate must be positive")}
+er <- as.vector(er)
+cov.mat <- as.matrix(cov.mat)
+N <- nrow(cov.mat)
+  
+Dmat <- 2*cov.mat
+dvec <- rep.int(0, N)
+er.excess <- er - risk.free
+#Amat <- cbind(er.excess, diag(1,N))
+Amat <- cbind(rep(1,N), m)
+bvec <- c(1, .10)
+result <- quadprog::solve.QP(Dmat=Dmat,dvec=dvec,Amat=Amat,bvec=bvec,meq=1)
+w.t <- round(result$solution/sum(result$solution), 6)
+  
+w.t  
+# WITHOUT SHORT SALES
+
+    
+# w.t = tangency.portfolio(er = R,
+#                          cov.mat = cov.mat,
+#                          risk.free = rf,
+#                          shorts = FALSE)
+# w.t = inv.cov.mat %*% (m - mf * ones) / ((t(ones) %*% inv.cov.mat %*% (m - mf * ones))[1])
+# w.t1 = w.t
 ```
 
 ## Asset Allocation
+
+### Only Risky Assets Allocation
+Suppose you wanted to achieve a target expected return of 6% per year (which corresponds
+to an expected return of 0.5% per month) using only the risky assets and no short sales
+allowed, what is the efficient portfolio that achieves this target return? How much is invested
+in each of the assets in this efficient portfolio?
+
+Compute:
+monthly risk on this efficient portfolio
+
+
 ```{r}
 target.expected.return.yearly = 0.06
 target.expected.return.monthly = target.expected.return.yearly / 12
 
+eff.port.return.risky = portfolio.optim(x = net.returns,
+                                        pm = target.expected.return.monthly)
+
+R.eff.port.risky = eff.port.return.risky$px
+
+print(paste("The monthly risl on this efficient portfolio is ", round(eff.port.return.risky$ps, 4)))
+
+
+
 ```
+
+Compute monthly 5% value-at-risk and expected shortfall based on an initial $100,000 investment.
+```{r}
+# Var and ES
+
+# VaR
+S0 = 1e5
+alpha = 0.05
+
+q.eff.port.risky = quantile(R.eff.port.risky,
+                            probs = c(alpha))
+VaR.eff.port.risky = (-S0 * q.eff.port.risky) %>% as.numeric()
+
+VaR.eff.port.risky
+
+# Expected Shortfall
+ES.eff.port.risky = sum((-S0 * R) * (-S0 * R > VaR.eff.port.risky)) /  sum(-S0 * R > VaR.eff.port.risky)
+ES.eff.port.risky
+
+individual.VaR.eff.port.risky = VaR(net.returns, p = 1 - alpha, method = "historical") * -S0
+individual.VaR.eff.port.risky
+```
+
+
+
+### T Bills + Tangency Portfolio Asset Allocation
+
+
+Now suppose you wanted to achieve a target expected return of 6%
+per year (which corresponds to an expected return of 0.5% per month) using a combination
+of T-Bills and the tangency portfolio (that does not allow for short sales)
+In this allocation,
+how much is invested in each of the assets and how much is invested in the risk free asset?
+
+```{r}
+# W*mean_T + 1-w(rf) = 0.05
+```
+
+Compute the monthly risk on this efficient portfolio, as well as the monthly and 5% value-
+at-risk and expected shortfall based on an initial $100,000 investment.
+
+Compare this with the VaR computed from the allocation of risky assets without short sales.
+
+
 
 ## Principal Component Analysis
 
-<<<<<<< HEAD
-<!-- Compute the sample correlation matrix of the returns on your assets. 
-Which assets are
-most highly correlated?
-Which are least correlated?
-
-Based on the estimated correlation
-values do you think diversification will reduce risk with these assets?
-
-Run the PCA analysis and comment on your results.
 
 Run factor analysis and report the number and the loadings
 of each factors. 
 Do they have any meaningful interpretation? -->
 
 
-=======
->>>>>>> aadb4c07f9dd9a448a013bdfa9087da8817a152e
+
 ```{r}
 
 cor.mat <- cor(net.returns) %>%
     as.data.frame()
-<<<<<<< HEAD
-=======
+
            
 cor.mat
            
->>>>>>> aadb4c07f9dd9a448a013bdfa9087da8817a152e
+
 
 cor.mat > 0.5 & cor.mat < 1
 
@@ -715,15 +883,91 @@ From our factor analysis we can observe from our graph of factor 1 vs factor 2 t
 Assume that you have $100,000 to invest. For each asset, estimate the 5% value-at-risk of
 the and expected shortfall on $100,000 investment over a one month investment horizon
 based on the normal distribution using the estimated means and variances of your assets.
-Do the same using the nonparametric method we discussed in class. Which assets have the
-highest and lowest VaR at a one month horizon? Which assets have the highest and lowest
-expected shortfall at a one month horizon? Do the same for all your portfolios. Use the
+
+Which assets have the
+highest and lowest VaR at a one month horizon? 
+
+Which assets have the highest and lowest
+expected shortfall at a one month horizon?
+
+Do the same using the nonparametric method we discussed in class. 
+
+Do the same for all your portfolios. (Efficient, MVP, Efficient Rsky, tangency + risk free )
+
+Use the
 bootstrap to compute estimated standard errors and 95% confidence intervals for your 5%
 VaR and expected short fall. .
 
+### Normal parametric VaR and ES
 
 ```{r}
+alpha <- 0.05
+S0 <- 1e5
 
+vaR.norm <- -S0*VaR(net.returns, p = 1- alpha, method="gaussian")
+
+vaR.norm
+
+max.VaR = max(vaR.norm) # AMD
+
+print(paste0("Max VaR is for AMD stock = ", round(max.VaR,3) ))
+
+min.VaR = min(vaR.norm) # MSFT
+
+print(paste0("Min VaR is for MSFT stock = ", round(min.VaR,3) ))
+
+ES.norm = -S0*ES(net.returns, p = 1-alpha, method = "gaussian")
+ES.norm
+
+max.ES = max(ES.norm) # AMD
+
+print(paste0("Max ES is for AMD stock = ", round(max.ES,3) ))
+
+min.ES = min(ES.norm) # MSFT
+
+print(paste0("Min ES is for MSFT stock = ", round(min.ES,3) ))
+
+
+
+
+```
+
+### Nonparametric VaR and ES
+
+```{r}
+# VaR
+S0 = 1e5
+alpha = 0.05
+R.nonparam = R
+q.nonparam = quantile(R.nonparam, probs = c(alpha))
+  VaR.nonparam = (-S0 * q.nonparam) %>% as.numeric()
+VaR.nonparam
+
+# Expected Shortfall
+ES.nonparam = sum((-S0 * R) * (-S0 * R > VaR.nonparam)) /  sum(-S0 * R > VaR.nonparam)
+ES.nonparam
+
+individual.VaR = VaR(net.returns, p = 1 - alpha, method = "historical") * -S0
+individual.VaR
+
+# Nonparametric VaR
+
+
+
+# Nonparametric ES
+
+```
+### Bootstrapping
+
+```{r}
+require(rugarch)
+garch.norm <- ugarchspec(mean.model = list(armaOrder = c(0,0)),
+                         variance.model = list(garchOrder = c(1,1)),
+                         distribution.model = "norm")
+sp.garch.norm <- ugarchfit(data=net.returns,spec=garch.norm)
+
+pred = ugarchforecast(sp.garch.norm, data = net.returns, n.ahead = 1)
+pred
 ```
 
 ## Copulas
