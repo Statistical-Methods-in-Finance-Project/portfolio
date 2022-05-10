@@ -459,7 +459,7 @@ ones = matrix(1, dim(inv.cov.mat))
 
 # Compute the MVP
 w.mvp = (inv.cov.mat %*% ones) / as.numeric(t(ones) %*% inv.cov.mat %*% ones)
-w.mvp
+round(100*w.mvp, 3)
 
 # Mean return
 m.mvp = t(w.mvp) %*% m %>% as.numeric()
@@ -539,7 +539,7 @@ wt.eps = efficient.portfolio.shorting$px[t.eps.filter]
 
 SharpeRatio(net.returns, Rf = mf, FUN = "StdDev")
 w.mvp
-efficient.portfolio.shorting$pw
+round(efficient.portfolio.shorting$pw,3)
 
 ```
 ### Efficient Portfolio (NO SHORTS)
@@ -561,7 +561,7 @@ wt.ep = efficient.portfolio$px[t.ep.filter]
 
 SharpeRatio(net.returns, Rf = mf, FUN = "StdDev")
 w.mvp
-efficient.portfolio$pw # for some reason even when shorts = FALSE we get negative weigths
+round(efficient.portfolio$pw,3) # for some reason even when shorts = FALSE we get negative weigths
 
 ```
 
@@ -663,6 +663,9 @@ target.expected.return.monthly = target.expected.return.yearly / 12
 eff.port.return.risky = portfolio.optim(x = net.returns,
                                         pm = target.expected.return.monthly)
 
+round(c(eff.port.return.risky$pw),5)
+colnames(net.returns)
+
 
 m.ep.risky = eff.port.return.risky$px
 sd.ep.risky = eff.port.return.risky$ps
@@ -727,11 +730,13 @@ w_tan = (target.expected.return.monthly - mf)/(wt.monthly - mf)
 
 w_rf= 1-w_tan
 
+sd_tan_monthly <- tangency_portfolio_sd
+
 print(paste("Despite the tangency portfolios not allowing for short sales, the optimum portfolio when combining the tangency portfolio with that of the risk free asset involves  a short sale of the risk free asset; essentially borrowing money. The weights of the tangency portfolio and risk free asset are", round(w_tan,3),"and", round(w_rf,3),"respectfully."))
 
 print(paste("The tangency portfolio weights from earlier means the final asset allocation is: AMD:",round(weight_tan_portfolio[1]*w_tan,3),"NVDA:", round(weight_tan_portfolio[7]*w_tan,3),"Risk Free Asset:",round(w_rf,3)))
 
-
+print(paste("The monthly risk on this efficient portfolio made up of tangency portfolio and risky assets is ", round(w_tan*sd_tp, 4)))
 
 ```
 
@@ -925,6 +930,7 @@ S0 <- 1e5
 
 vaR.norm <- -S0*VaR(net.returns, p = 1- alpha, method="gaussian")
 
+
 vaR.norm
 
 max.VaR = max(vaR.norm) # AMD
@@ -969,13 +975,105 @@ ES.nonparam
 individual.VaR = VaR(net.returns, p = 1 - alpha, method = "historical") * -S0
 individual.VaR
 
-# Nonparametric VaR
+individual.ES = ES(net.returns, p = 1 - alpha, method = "historical") * -S0
+individual.ES
 
+# Nonparametric VaR
+max(individual.VaR)
+min(individual.VaR)
 
 
 # Nonparametric ES
 
+max(individual.ES)
+min(individual.ES)
+
 ```
+# Other Portfolios
+
+```{r}
+VaR.ep <- -S0*VaR(efficient.portfolio$px, p = 1- alpha, method="gaussian")
+
+ES.ep <- -S0*ES(efficient.portfolio$px, p = 1- alpha, method="gaussian")
+
+
+VaR.eps <- -S0*VaR(efficient.portfolio.shorting$px, p = 1- alpha, method="gaussian")
+
+
+ES.eps <- -S0*ES(efficient.portfolio.shorting$px, p = 1- alpha, method="gaussian")
+
+
+VaR.mvp_norm <- -S0*VaR(c(t(R.mvp)) , p = 1- alpha, method="gaussian")
+
+
+ES.mvp_norm <- -S0*ES(c(t(R.mvp)), p = 1- alpha, method="gaussian")
+
+
+VaR.mvp_ep_risky <- -S0*VaR(eff.port.return.risky$px , p = 1- alpha, method="gaussian")
+
+
+
+ES.mvp_ep_risky <- -S0*ES(eff.port.return.risky$px, p = 1- alpha, method="gaussian")
+
+tibble(VaR.ep,
+ES.ep,
+VaR.eps,
+ES.eps,
+VaR.mvp_norm,
+ES.mvp_norm,
+VaR.mvp_ep_risky,
+ES.mvp_ep_risky)
+
+```
+
+```{r}
+VaR.ep <- -S0*VaR(efficient.portfolio$px, p = 1- alpha, method="historical")
+
+ES.ep <- -S0*ES(efficient.portfolio$px, p = 1- alpha, method="historical")
+
+
+VaR.eps <- -S0*VaR(efficient.portfolio.shorting$px, p = 1- alpha, method="historical")
+
+
+ES.eps <- -S0*ES(efficient.portfolio.shorting$px, p = 1- alpha, method="historical")
+
+
+VaR.mvp_norm <- -S0*VaR(c(t(R.mvp)) , p = 1- alpha, method="historical")
+
+
+ES.mvp_norm <- -S0*ES(c(t(R.mvp)), p = 1- alpha, method="historical")
+
+
+VaR.mvp_ep_risky <- -S0*VaR(eff.port.return.risky$px , p = 1- alpha, method="historical")
+
+
+
+ES.mvp_ep_risky <- -S0*ES(eff.port.return.risky$px, p = 1- alpha, method="historical")
+
+tibble(VaR.ep,
+ES.ep,
+VaR.eps,
+ES.eps,
+VaR.mvp_norm,
+ES.mvp_norm,
+VaR.mvp_ep_risky,
+ES.mvp_ep_risky)
+
+
+```
+```{r}
+
+library(cellranger)
+
+var_es_portfolios_normalparam <- readxl::read_xlsx("./data/var_es_portfolios_normalparam.xlsx",
+                                                  range = cell_cols("A:C"))
+
+var_es_portfolios <- readxl::read_xlsx("./data/var_es_portfolios.xlsx")
+
+
+```
+
+
 ### Bootstrapping
 
 ```{r}
